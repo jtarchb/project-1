@@ -5,306 +5,194 @@
 import { LitElement, html, css } from "lit";
 import { DDDSuper } from "@haxtheweb/d-d-d/d-d-d.js";
 import { I18NMixin } from "@haxtheweb/i18n-manager/lib/I18NMixin.js";
-
-/**
- * `project-1`
- *
- * @demo index.html
- * @element project-1
- */
+import "./project-1-card.js";
+import "./project-1-arrow.js";
+import "./project-1-dot.js";
+ 
 export class Project1 extends DDDSuper(I18NMixin(LitElement)) {
-
-  static get tag() {
-    return "project-1";
-  }
-
+  static get tag() { return "project-1"; }
+ 
+  static properties = {
+    source: { type: String },
+    activeIndex: { type: Number, reflect: true },
+    _posts: { state: true },
+    _loading: { state: true },
+    _likes: { state: true },
+  };
+ 
   constructor() {
     super();
-    this.title = "Fox title";
-    this.foxImage = "";
-    this.foxLink = "";
-    this.liked = false;
-    this.disliked = false;
-    this.t = this.t || {};
-    this.t = {
-      ...this.t,
-      title: "Title",
-    };
+    this.source = "/api/photos";
+    this.activeIndex = 0;
+    this._posts = [];
+    this._loading = true;
+    this._likes = {};
+    this.t = { ...this.t, title: "Title" };
     this.registerLocalization({
       context: this,
-      localesPath:
-        new URL("./locales/project-1.ar.json", import.meta.url).href +
-        "/../",
+      localesPath: new URL("./locales/project-1.ar.json", import.meta.url).href + "/../",
       locales: ["ar", "es", "hi", "zh"],
     });
   }
-
-  // Lit reactive properties
-  static get properties() {
-    return {
-      ...super.properties,
-      title: { type: String },
-      foxImage: { type: String },
-      foxLink: { type: String },
-      liked: { type: Boolean },
-      disliked: { type: Boolean },
-    };
+ 
+  firstUpdated() {
+    super.firstUpdated && super.firstUpdated();
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = parseInt(params.get("activeIndex"));
+    if (!isNaN(fromUrl) && fromUrl >= 0) this.activeIndex = fromUrl;
+    try {
+      const stored = localStorage.getItem("project-1-likes");
+      if (stored) this._likes = JSON.parse(stored);
+    } catch (e) { this._likes = {}; }
+    this._fetchData();
   }
-
-  // Runs automatically when the element is added to the page
-  connectedCallback() {
-    super.connectedCallback();
-    this.fetchFox();
+ 
+  updated(changedProperties) {
+    super.updated && super.updated(changedProperties);
+    if (changedProperties.has("activeIndex")) {
+      const params = new URLSearchParams(window.location.search);
+      params.set("activeIndex", this.activeIndex);
+      window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+    }
   }
-
-  // Fetches a random fox from the API
-  async fetchFox() {
-    const response = await fetch("https://randomfox.ca/floof/");
-    const data = await response.json();
-    this.foxImage = data.image;
-    this.foxLink = data.link;
+ 
+  async _fetchData() {
+    this._loading = true;
+    try {
+      const res = await fetch(this.source);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      this._posts = data.items || [];
+      if (this.activeIndex >= this._posts.length) this.activeIndex = 0;
+    } catch (e) {
+      console.error("project-1: failed to load data", e);
+      this._posts = [];
+    } finally {
+      this._loading = false;
+    }
   }
-
-  // Called when the like button is clicked
-  handleLike() {
-    this.liked = !this.liked;
-    if (this.liked) this.disliked = false;
+ 
+  _prev() { if (this.activeIndex > 0) this.activeIndex--; }
+  _next() { if (this.activeIndex < this._posts.length - 1) this.activeIndex++; }
+ 
+  _handleLikeChanged(e) {
+    const { index, liked } = e.detail;
+    const updated = { ...this._likes };
+    liked ? (updated[index] = "liked") : delete updated[index];
+    this._likes = updated;
+    this._saveLikes();
   }
-
-  // Called when the dislike button is clicked
-  handleDislike() {
-    this.disliked = !this.disliked;
-    if (this.disliked) this.liked = false;
+ 
+  _handleDislikeChanged(e) {
+    const { index, disliked } = e.detail;
+    const updated = { ...this._likes };
+    disliked ? (updated[index] = "disliked") : delete updated[index];
+    this._likes = updated;
+    this._saveLikes();
   }
-
-  // Lit scoped styles
-  static get styles() {
-    return [super.styles,
+ 
+  _saveLikes() {
+    try { localStorage.setItem("project-1-likes", JSON.stringify(this._likes)); }
+    catch (e) { console.warn("project-1: could not save to localStorage"); }
+  }
+ 
+  static styles = [
+    super.styles,
     css`
       :host {
         display: block;
-        font-family: var(--ddd-font-navigation);
-        background-color: var(--ddd-theme-accent);
-        color: var(--ddd-theme-primary);
+        font-family: var(--ddd-font-primary);
+        background: var(--ddd-theme-default-slateLight);
+        border-radius: var(--ddd-radius-lg);
+        overflow: hidden;
+        position: relative;
       }
-
-      /* Outer wrapper centers the card on the page */
-      .wrapper {
+      .slides {
+        display: flex;
+        transition: transform 0.4s ease;
+        min-height: 520px;
+      }
+      .arrows {
+        position: absolute;
+        top: 38%;
+        left: var(--ddd-spacing-2);
+        right: var(--ddd-spacing-2);
+        display: flex;
+        justify-content: space-between;
+        pointer-events: none;
+        transform: translateY(-50%);
+        z-index: 10;
+      }
+      project-1-arrow { pointer-events: auto; }
+      .dots {
         display: flex;
         justify-content: center;
-        padding: var(--ddd-spacing-4);
-      }
-
-      /* The card itself */
-      .card {
+        padding: var(--ddd-spacing-3) var(--ddd-spacing-4);
         background: white;
-        border: 1px solid #dbdbdb;
-        border-radius: 8px;
-        width: 100%;
-        max-width: 400px;
-        overflow: hidden;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        border-top: 1px solid var(--ddd-theme-default-slateMaxLight);
+        flex-wrap: wrap;
       }
-
-      /* Title bar at the top of the card */
-      .card-title {
-        padding: var(--ddd-spacing-3) var(--ddd-spacing-4);
-        font-size: var(--ddd-font-size-m);
-        font-weight: bold;
-        border-bottom: 1px solid #dbdbdb;
-        background-color: var(--ddd-theme-primary);
-        color: white;
-        text-align: center;
-      }
-
-      /* Image row: arrows on left/right, image in middle */
-      .image-row {
+      .status {
         display: flex;
         align-items: center;
-        background: #000;
+        justify-content: center;
+        min-height: 300px;
+        font-family: var(--ddd-font-primary);
+        font-size: var(--ddd-font-size-sm);
+        color: var(--ddd-theme-default-limestoneGray);
       }
-
-      .arrow-btn {
-        background: none;
-        border: none;
-        color: white;
-        font-size: 24px;
-        cursor: pointer;
-        padding: var(--ddd-spacing-2);
-        flex-shrink: 0;
-      }
-
-      .arrow-btn:hover {
-        opacity: 0.7;
-      }
-
-      .fox-image {
-        flex: 1;
-        width: 100%;
-        display: block;
-        max-height: 350px;
-        object-fit: cover;
-      }
-
-      /* Row below image: like/dislike on left, username on right */
-      .action-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: var(--ddd-spacing-2) var(--ddd-spacing-4);
-        border-top: 1px solid #dbdbdb;
-      }
-
-      .like-buttons {
-        display: flex;
-        gap: var(--ddd-spacing-2);
-      }
-
-      .like-btn, .dislike-btn {
-        background: none;
-        border: none;
-        font-size: 22px;
-        cursor: pointer;
-        transition: transform 0.1s;
-      }
-
-      .like-btn:active, .dislike-btn:active {
-        transform: scale(1.3);
-      }
-
-      .username {
-        font-size: var(--ddd-font-size-s);
-        color: #555;
-        font-weight: bold;
-      }
-
-      /* Description section at the bottom of the card */
-      .description {
-        padding: var(--ddd-spacing-3) var(--ddd-spacing-4);
-        font-size: var(--ddd-font-size-xs);
-        color: #333;
-        border-top: 1px solid #dbdbdb;
-        line-height: 1.5;
-      }
-
-      .description a {
-        color: var(--ddd-theme-primary);
-        text-decoration: none;
-      }
-
-      .description a:hover {
-        text-decoration: underline;
-      }
-
-      /* Refresh button */
-      .refresh-btn {
-        display: block;
-        width: calc(100% - var(--ddd-spacing-8));
-        margin: var(--ddd-spacing-3) auto;
-        padding: var(--ddd-spacing-2);
-        background-color: var(--ddd-theme-primary);
-        color: white;
-        border: none;
-        border-radius: 6px;
-        font-size: var(--ddd-font-size-s);
-        cursor: pointer;
-      }
-
-      .refresh-btn:hover {
-        opacity: 0.85;
-      }
-
-      /* Loading state */
-      .loading {
-        text-align: center;
-        padding: var(--ddd-spacing-8);
-        color: #888;
-      }
-
-      /* Dark mode support */
       @media (prefers-color-scheme: dark) {
-        .card {
-          background: #1a1a1a;
-          border-color: #333;
-          color: #eee;
-        }
-        .description {
-          color: #ccc;
-        }
-        .username {
-          color: #aaa;
-        }
+        :host { background: #1a1a1a; }
+        .dots { background: #1e1e1e; border-color: #333; }
       }
-
-      /* Mobile responsiveness */
       @media (max-width: 480px) {
-        .wrapper {
-          padding: var(--ddd-spacing-2);
-        }
-        .card {
-          border-radius: 0;
-        }
+        .slides { min-height: 420px; }
+        .arrows { left: var(--ddd-spacing-1); right: var(--ddd-spacing-1); }
       }
-    `];
-  }
-
-  // Lit render the HTML
+    `,
+  ];
+ 
   render() {
+    if (this._loading) return html`<div class="status">Loading...</div>`;
+    if (!this._posts.length) return html`<div class="status">No photos found.</div>`;
+ 
     return html`
-      <div class="wrapper">
-        <div class="card">
-
-          <!-- Title bar -->
-          <div class="card-title">${this.title}</div>
-
-          <!-- Image with arrows -->
-          <div class="image-row">
-            <button class="arrow-btn" @click=${this.fetchFox} title="Previous">&#8592;</button>
-
-            ${this.foxImage
-              ? html`<img class="fox-image" src="${this.foxImage}" alt="Random Fox" />`
-              : html`<div class="loading">Loading fox...</div>`
-            }
-
-            <button class="arrow-btn" @click=${this.fetchFox} title="Next">&#8594;</button>
-          </div>
-
-          <!-- Like/dislike + username row -->
-          <div class="action-row">
-            <div class="like-buttons">
-              <button class="like-btn" @click=${this.handleLike} title="Like">
-                ${this.liked ? "❤️" : "🤍"}
-              </button>
-              <button class="dislike-btn" @click=${this.handleDislike} title="Dislike">
-                ${this.disliked ? "👎" : "👍"}
-              </button>
-            </div>
-            <span class="username">@randomfox</span>
-          </div>
-
-          <!-- Description -->
-          <div class="description">
-            Enter Discription
-            <a href="${this.foxLink}" target="_blank">original photo</a>.
-            <br/>
-            <em>Click the arrows or refresh button to see another fox.</em>
-          </div>
-
-          <!-- Refresh button -->
-          <button class="refresh-btn" @click=${this.fetchFox}>New Fox</button>
-
-        </div>
+      <div
+        class="slides"
+        style="transform: translateX(-${this.activeIndex * 100}%);"
+        @like-changed=${this._handleLikeChanged}
+        @dislike-changed=${this._handleDislikeChanged}
+      >
+        ${this._posts.map((post, i) => html`
+          <project-1-card
+            .post=${post}
+            .index=${i}
+            .active=${i === this.activeIndex}
+            .liked=${this._likes[i] === "liked"}
+            .disliked=${this._likes[i] === "disliked"}
+          ></project-1-card>
+        `)}
+      </div>
+ 
+      <div class="arrows">
+        <project-1-arrow direction="left" ?disabled=${this.activeIndex === 0}
+          @arrow-click=${() => this._prev()}></project-1-arrow>
+        <project-1-arrow direction="right" ?disabled=${this.activeIndex === this._posts.length - 1}
+          @arrow-click=${() => this._next()}></project-1-arrow>
+      </div>
+ 
+      <div class="dots">
+        ${this._posts.map((_, i) => html`
+          <project-1-dot .index=${i} .active=${i === this.activeIndex}
+            @dot-click=${(e) => { this.activeIndex = e.detail.index; }}></project-1-dot>
+        `)}
       </div>
     `;
   }
-
-  /**
-   * haxProperties integration via file reference
-   */
+ 
   static get haxProperties() {
-    return new URL(`./lib/${this.tag}.haxProperties.json`, import.meta.url)
-      .href;
+    return new URL(`./lib/${this.tag}.haxProperties.json`, import.meta.url).href;
   }
 }
-
-globalThis.customElements.define(Project1.tag, Project1);
+ 
+customElements.define(Project1.tag, Project1);

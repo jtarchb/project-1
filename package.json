@@ -26,6 +26,9 @@
       "release": "npm run build && commit-and-tag-version && git push --follow-tags origin main && npm publish",
       "test": "web-test-runner test/**/*.test.js --coverage --node-resolve",
       "test:watch": "web-test-runner test/**/*.test.js --node-resolve --watch"
+      
+
+
     },
     "dependencies": {
       "lit": "3.3.1",
